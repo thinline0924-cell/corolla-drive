@@ -1,0 +1,9 @@
+車のモデル(e80.glb)
+
+This work is based on "low-poly Toyota Corolla E80 Sedan"
+(https://sketchfab.com/3d-models/low-poly-toyota-corolla-e80-sedan-6254cf268d9b46f79dd2a6511e153891)
+by D_U (https://sketchfab.com/DU1701)
+licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+
+ファイルは配布されたままです。ゲームの中(js/carmodel.js)で、色の塗り分け・タイヤの分け方・ライトの光り方を変えています。
+ゲームの画面(タイトル → クレジット)にも、同じ内容を表示しています。消さないでください。

@@ -1,0 +1,35 @@
+<!doctype html><html><head><meta charset="utf-8"><title>景色の確認(開発用)</title>
+<style>html,body{margin:0;background:#000}canvas{display:block}</style>
+<script type="importmap">{ "imports": { "three": "../lib/three.module.min.js", "three/addons/": "../lib/addons/" } }</script></head>
+<body><script type="module">
+// 開発用:景色だけを、決めた場所から描く。?at=名前&clock=18.6
+import * as THREE from 'three';
+import * as W from '../js/world.js';
+import { buildWorld, cullWorld } from '../js/scenery.js';
+import { createSky } from '../js/sky.js';
+const q = new URLSearchParams(location.search);
+const r = new THREE.WebGLRenderer({ antialias: false, preserveDrawingBuffer: true });
+r.setSize(innerWidth, innerHeight); r.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(r.domElement);
+const scene = new THREE.Scene();
+const t0 = performance.now();
+const world = buildWorld(scene);
+console.log('build ms', performance.now() - t0);
+const sky = createSky(scene);
+const cam = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 3000);
+const at = q.get('at') || 'start';
+const [roadId, s, d, look] = { start: ['r1', 10, -1.6, 60], yJunc: ['r1', 1220, -1.6, 70], torii: ['r3', 950, -1.6, 50], tunnel: ['r5', 640, -1.6, 50], intunnel: ['r6', 200, -1.6, 40], cross: ['r7', 700, -1.6, 70], onsen: ['r9', 380, -1.6, 60], bridge: ['r3', 40, -1.6, 50], ford: ['r5', 230, -1.6, 50], gas: ['r2', 380, -1.6, 70], top: ['r3', 400, -1.6, 50] }[at];
+const S = W.roadById[roadId].samples;
+const i = Math.round(s / 2), o = S[i], o2 = S[Math.min(S.length - 1, i + Math.round(look / 2))];
+cam.position.set(o.x + o.rx * d, o.y + 1.3, o.z + o.rz * d);
+cam.lookAt(o2.x + o2.rx * d, o2.y + 1.0, o2.z + o2.rz * d);
+if (q.get('up')) { cam.position.y += +q.get('up'); }
+cullWorld(world, cam.position.x, cam.position.z);
+sky.update(+(q.get('clock') || 18.5), 0.6, cam.position, at === 'intunnel' ? 1 : 0);
+// 近くの明かり
+const pts = world.emitters.map(e => [e, (e.x - cam.position.x) ** 2 + (e.z - cam.position.z) ** 2]).sort((a, b) => a[1] - b[1]).slice(0, 3);
+for (const [e] of pts) { const L = new THREE.PointLight(e.color, e.intensity, e.dist, 1.5); L.position.set(e.x, e.y, e.z); scene.add(L); }
+for (const f of world.animated) f(0.1);
+r.render(scene, cam);
+window.DONE = true;
+</script></body></html>

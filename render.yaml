@@ -1,0 +1,12 @@
+# Render Blueprint(Render で公開するための設定ファイル)
+# 静的サイト(ファイルをそのまま配るだけ)なので無料で、APIキーなどの設定も不要
+services:
+  - type: web
+    name: yunosawa
+    runtime: static
+    buildCommand: echo "ビルドは不要です"
+    staticPublishPath: .
+    headers:
+      - path: /*
+        name: Cache-Control
+        value: no-cache

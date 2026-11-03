@@ -1,0 +1,35 @@
+<!doctype html><html><head><meta charset="utf-8"><title>地図(開発用)</title><style>body{margin:0;background:#111}</style></head><body>
+<canvas id="c" width="1600" height="1600"></canvas>
+<script type="module">
+// 開発用:山と道を上から見た地図
+import * as W from '../js/world.js';
+const c = document.getElementById('c'), g = c.getContext('2d');
+const N = W.GRID_N, img = g.createImageData(1600, 1600);
+const sc = 1600 / W.MAP.size;
+for (let py = 0; py < 1600; py++) for (let px = 0; px < 1600; px++) {
+  const x = W.MAP.x0 + px / sc, z = W.MAP.z0 + py / sc;
+  const h = W.terrainHeight(x, z), hx = W.terrainHeight(x + 4, z), hz = W.terrainHeight(x, z + 4);
+  const shade = Math.max(0, Math.min(1, 0.6 + ((h - hx) - (h - hz)) * 0.08));
+  const t = Math.min(1, h / 250);
+  let r = (60 + 120 * t) * shade, gg = (90 + 90 * t) * shade, b = (60 + 80 * t) * shade;
+  if (W.waterLevelAt(x, z) > h) { r = 40; gg = 70; b = 110; }
+  const k = (py * 1600 + px) * 4; img.data[k] = r; img.data[k + 1] = gg; img.data[k + 2] = b; img.data[k + 3] = 255;
+}
+g.putImageData(img, 0, 0);
+const P = (x, z) => [(x - W.MAP.x0) * sc, (z - W.MAP.z0) * sc];
+for (const r of W.roads) {
+  g.lineWidth = r.kindName === 'pref' ? 3 : 2;
+  for (let i = 1; i < r.samples.length; i++) {
+    const a = r.samples[i - 1], b = r.samples[i];
+    g.strokeStyle = b.tunnel ? '#f0a020' : b.bridge ? '#40c0ff' : b.ford ? '#80f' : (r.kindName === 'gravel' ? '#c8b080' : '#eee');
+    g.beginPath(); g.moveTo(...P(a.x, a.z)); g.lineTo(...P(b.x, b.z)); g.stroke();
+  }
+  const m = r.samples[r.samples.length >> 1];
+  g.fillStyle = '#ff0'; g.font = '14px sans-serif'; g.fillText(r.id, ...P(m.x + 8, m.z));
+}
+for (const [k, [x, z]] of Object.entries(W.NODES)) {
+  g.fillStyle = '#f33'; g.beginPath(); g.arc(...P(x, z), 5, 0, 7); g.fill();
+  g.fillStyle = '#fff'; g.font = 'bold 15px sans-serif'; g.fillText(k + ' ' + W.nodeHeight[k].toFixed(0), ...P(x + 8, z - 8));
+}
+window.DONE = true;
+</script></body></html>
