@@ -1,6 +1,6 @@
 // 湯ノ沢まで:ゲームの本体(画面の切り替え、毎フレームの処理)
 import * as THREE from 'three';
-import { KEYS, Input } from './input.js';
+import { KEYS, Input, keyCard, TOUCH_CARD } from './input.js';
 import { Audio } from './audio.js';
 
 const $ = (s) => document.querySelector(s);
@@ -9,7 +9,7 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const isTouch = matchMedia('(pointer: coarse)').matches;
 
 // ------------------------------------------------------------ 設定(この端末だけに覚える)
-const DEFAULTS = { trans: 'AT', autoClutch: true, abs: true, res: 360, vol: 0.8, hints: true };
+const DEFAULTS = { trans: 'AT', autoClutch: true, abs: true, res: 360, vol: 0.6, hints: true };
 const S = { ...DEFAULTS };
 try { Object.assign(S, JSON.parse(localStorage.getItem('yunosawa-settings') || '{}')); } catch (e) { /* 保存できない環境 */ }
 const save = () => { try { localStorage.setItem('yunosawa-settings', JSON.stringify(S)); } catch (e) { /* 何もしない */ } };
@@ -124,7 +124,7 @@ function placeAtStart() {
 function newDrive() {
   placeAtStart();
   Object.assign(G, {
-    clock: 18.4, rain: 0.55, rainTarget: 0.6, rainTimer: 25, flood: 0.15, fog: 0.12, defrost: false, room: false,
+    camQ: null, clock: 18.4, rain: 0.55, rainTarget: 0.6, rainTimer: 25, flood: 0.15, fog: 0.12, defrost: false, room: false,
     lights: 0, high: false, wiperMode: 0, wiperAng: 0, wiperDir: 0, komazu: 0, keyOn: false, crumbs: [], fallT: 0,
     startOdo: car.odo, startClock: 18.4, realTime: 0, refuel: 0, out: false, hinted: {}, view: 0,
   });
@@ -267,6 +267,22 @@ function msg(text, sub = '', dur = 3) {
   msgTimer = dur;
 }
 
+// ------------------------------------------------------------ 操作表(運転中にいつでも出せる)
+function renderKeyCard() {
+  const groups = isTouch ? TOUCH_CARD : keyCard(!isAT(), !car.autoClutch);
+  const mode = `${isAT() ? 'AT' : 'MT'}${!isAT() ? (car.autoClutch ? ' · 自動クラッチ' : ' · 手動クラッチ') : ''} · ABS ${car.abs ? 'あり' : 'なし'}`;
+  $('#keys-card').innerHTML = groups.map(([h, rows]) => `<h4>${h}</h4>` + rows.map(([k, t]) => `<div class="kr"><span>${k}</span><span>${t}</span></div>`).join('')).join('')
+    + `<div class="mode">${mode}</div>`;
+}
+function toggleKeys(force) {
+  const el = $('#keys-card');
+  const on = force ?? el.classList.contains('hidden');
+  if (on) renderKeyCard();
+  el.classList.toggle('hidden', !on);
+  $('#keys-tag').classList.toggle('hidden', on);
+  const b = document.querySelector('#touch [data-a=keys]'); if (b) b.classList.toggle('on', on);
+}
+
 // ------------------------------------------------------------ 操作
 const isAT = () => car.trans === 'AT';
 function action(a, down) {
@@ -293,6 +309,7 @@ function action(a, down) {
     case 'trip': car.trip = 0; audio.click(); break;
     case 'respawn': respawn(); break;
     case 'pause': pause(true); break;
+    case 'keys': toggleKeys(); break;
   }
 }
 const KEYMAP = { KeyE: 'leverDown', KeyQ: 'leverUp', KeyO: 'od', KeyL: 'lights', KeyH: 'high', KeyX: 'wiper', KeyF: 'defrost', KeyR: 'room', KeyV: 'view', KeyT: 'trip', Backspace: 'respawn' };
@@ -310,6 +327,7 @@ input.on('down', code => {
     return;
   }
   if (G.state === 'drive' && G.out && code === 'Enter') { refuelRestart(); return; }
+  if (code === 'Tab') { if (G.state === 'drive') toggleKeys(); return; }
   if (code === 'KeyK') action('engine', true);
   if (code === 'KeyC') action('komazu', true);
   // MT はシフトアップが E(手前ではなく上へ)
@@ -334,6 +352,7 @@ function respawn() {
     if (c) car.reset(c.x, c.y, c.z, c.yaw);
     else placeAtStart();
     car.vel = { x: 0, y: 0, z: 0 };
+    G.camQ = null;
     msg('少し手前から', '', 2);
   });
 }
@@ -344,6 +363,7 @@ function refuelRestart() {
     const o = W.nearestRoad(g.x, g.z, 40);
     car.reset(o.px - o.rx * 1.6, o.y, o.pz - o.rz * 1.6, Math.atan2(o.tx, o.tz) + Math.PI);
     car.fuel = 20; G.clock += 0.33; // 20分おくれる
+    G.camQ = null;
     msg('ガソリンスタンドから', '20分たった', 3);
   });
 }
@@ -591,8 +611,13 @@ function draw(dt) {
     camera.clearViewOffset();
     // 運転席:頭は少し遅れて揺れる(加速・カーブで)
     const a = car.lastAcc || { x: 0, z: 0 };
-    headOff.x += (clamp(-a.x * 0.006, -0.05, 0.05) - headOff.x) * Math.min(1, dt * 6);
-    headOff.z += (clamp(-a.z * 0.004, -0.04, 0.04) - headOff.z) * Math.min(1, dt * 6);
+    headOff.x += (clamp(-a.x * 0.003, -0.025, 0.025) - headOff.x) * Math.min(1, dt * 4);
+    headOff.z += (clamp(-a.z * 0.002, -0.02, 0.02) - headOff.z) * Math.min(1, dt * 4);
+    // 頭は車体の細かい揺れを首で吸収する:車の向きをゆっくり追いかけ、半分だけ車に合わせる
+    if (!G.camQ) G.camQ = qCar.clone();
+    G.camQ.slerp(qCar, 1 - Math.exp(-dt / 0.2));
+    const qHead = G.camQ.clone().slerp(qCar, 0.5);
+    const qRel = qCar.clone().invert().multiply(qHead); // 車から見た頭の傾き
     const k = G.komazu;
     G.komazu += ((G.komazuHeld ? 1 : 0) - G.komazu) * Math.min(1, dt * 7);
     const eye = new THREE.Vector3(0.37 + headOff.x - 0.07 * k, 0.615 - 0.01 * k, 0.15 + headOff.z - 0.03 * k);
@@ -605,11 +630,11 @@ function draw(dt) {
     const qLook = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, -1), dir);
     const sh = G.shake; G.shake *= Math.exp(-dt * 8);
     const qShake = new THREE.Quaternion().setFromEuler(eul.set((Math.random() - 0.5) * sh * 0.03, (Math.random() - 0.5) * sh * 0.03, 0));
-    camera.quaternion.copy(qCar).multiply(qLook).multiply(qShake);
+    camera.quaternion.copy(qHead).multiply(qLook).multiply(qShake);
     camera.fov = 56 - 33 * smooth(k); camera.updateProjectionMatrix();
-    // 車内のカメラは車に固定
+    // 車内のカメラ(車内の物は車に固定。頭の傾きの分だけ回す)
     ckCam.position.set(-0.07 * k + headOff.x, cockpitMod.EYE_Y - 0.01 * k, -0.03 * k + headOff.z);
-    ckCam.quaternion.copy(qLook).multiply(qShake);
+    ckCam.quaternion.copy(qRel).multiply(qLook).multiply(qShake);
     ckCam.fov = camera.fov; ckCam.updateProjectionMatrix();
     cockpit = ck.scene; glassOn = true;
     model.group.visible = false;

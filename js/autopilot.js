@@ -54,7 +54,7 @@ export class Autopilot {
     const L2 = lx * lx + lz * lz;
     const curv = 2 * lx / Math.max(1, L2);
     const delta = Math.atan(curv * 2.43);
-    const lim = 0.62 / (1 + v * 3.6 / 45);
+    const lim = car.steerLimit(true);
     const steer = Math.max(-1, Math.min(1, delta / lim));
     // 先のカーブの強さから速さを決める
     let maxCurv = 0;

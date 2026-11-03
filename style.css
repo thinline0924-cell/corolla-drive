@@ -136,3 +136,23 @@ input[type=range] { width: 100%; accent-color: var(--sodium); }
   font-size: 12px; line-height: 1.7; color: var(--ink-dim); user-select: text; -webkit-user-select: text; word-break: break-all; }
 .error-box button { border: 1px solid var(--line); padding: 9px 18px; font-size: 14px; }
 .error-box button:hover { border-color: var(--ink-dim); }
+
+/* 操作表(運転中にいつでも) */
+#keys-tag { position: absolute; left: 18px; top: 14px; font-size: 12px; color: var(--ink-faint); letter-spacing: 0.08em; text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8); }
+#keys-tag b { font-family: var(--num); font-weight: 600; font-size: 13px; color: var(--ink-dim); margin-right: 6px; letter-spacing: 0.06em; }
+#keys-card {
+  position: absolute; left: 18px; top: 40px; width: min(380px, calc(100vw - 36px)); max-height: calc(100vh - 60px); overflow: hidden;
+  background: rgba(10, 12, 12, 0.84); border-left: 3px solid var(--sodium); padding: 12px 16px 6px;
+}
+#keys-card h4 { margin: 8px 0 4px; font-family: var(--num); font-weight: 600; font-size: 11px; letter-spacing: 0.2em; color: var(--sodium); }
+#keys-card h4:first-child { margin-top: 0; }
+#keys-card .kr { display: grid; grid-template-columns: 6.6em 1fr; gap: 10px; padding: 4px 0; border-bottom: 1px solid rgba(233, 229, 219, 0.08); font-size: 13px; }
+#keys-card .kr span:first-child { font-family: var(--num); font-size: 15px; color: var(--ink); letter-spacing: 0.06em; white-space: nowrap; }
+#keys-card .kr span:last-child { color: var(--ink-dim); }
+#keys-card .mode { font-size: 11px; color: var(--ink-faint); margin: 8px 0 6px; letter-spacing: 0.06em; }
+@media (pointer: coarse) {
+  #keys-tag { display: none; }
+  #keys-card { top: 52px; left: auto; right: max(10px, env(safe-area-inset-right)); width: min(420px, 70vw); max-height: calc(100vh - 175px); overflow-y: auto; pointer-events: auto; touch-action: pan-y; }
+  #keys-card .kr span:first-child { font-family: var(--jp); font-size: 12px; }
+  #keys-card .kr { grid-template-columns: 8.4em 1fr; }
+}

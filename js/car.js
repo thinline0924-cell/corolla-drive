@@ -31,7 +31,7 @@ export const SPEC = {
   wheelBase: 2.43, front: -1.10, rear: 1.33, track: 1.41,
   radius: 0.30,
   restLen: 0.32, attachY: 0.0,
-  springF: 26000, springR: 22000, bump: 2100, rebound: 3000, arbF: 9000, arbR: 4500,
+  springF: 30000, springR: 26000, bump: 2900, rebound: 4300, arbF: 7000, arbR: 3500,
   maxSteer: 0.62,
   brakeF: 1500, brakeR: 820, handbrake: 1600,
   engineInertia: 0.17,
@@ -63,6 +63,9 @@ export class Car {
     this.trans = opts.trans || 'AT';            // 'AT' / 'MT'
     this.autoClutch = opts.autoClutch ?? true;
     this.abs = opts.abs ?? true;
+    // 地面の高さと種類を調べる関数(試験のときは平らな地面に差し替えられる)
+    this.gAt = opts.groundAt || groundAt;
+    this.sAt = opts.surfaceAt || surfaceAt;
     this.wheels = [
       { name: 'FL', x: -SPEC.track / 2, z: SPEC.front, front: true, side: -1 },
       { name: 'FR', x: SPEC.track / 2, z: SPEC.front, front: true, side: 1 },
@@ -166,10 +169,13 @@ export class Car {
 
   controls(dt, input) {
     const kmh = Math.abs(this.speed) * 3.6;
-    // ハンドル:キーボードは速いほど切れ角を小さく、ゆっくり動かす(運転しやすくするため)
-    const lim = SPEC.maxSteer / (1 + kmh / (input.analogSteer ? 70 : 45));
+    // ハンドル:キーボードは押しているあいだ少しずつ切れていき、速いほど切れ角を小さく、ゆっくりにする
+    // (キーを少し押しただけで大きく曲がらないように)。スマホのつまみは、つまみの位置どおりに切る
+    const analog = !!input.analogSteer;
+    const lim = this.steerLimit(analog);
     this.steerTarget = clamp(input.steer, -1, 1) * lim;
-    const rate = (Math.sign(this.steerTarget - this.steer) === Math.sign(this.steer) || this.steerTarget === 0 ? 1.9 : 1.3) * (input.analogSteer ? 2.4 : 1);
+    const toCenter = Math.abs(this.steerTarget) < Math.abs(this.steer) && Math.sign(this.steerTarget || -this.steer) !== Math.sign(this.steer) || this.steerTarget === 0;
+    const rate = analog ? 2.2 : toCenter ? 1.6 : 1.0 / (1 + kmh / 20);
     const dS = this.steerTarget - this.steer;
     this.steer += clamp(dS, -rate * dt, rate * dt);
     // ペダル
@@ -182,6 +188,12 @@ export class Car {
     const target = input.clutch ? 1 : 0;
     const cr = target > this.clutchPedal ? 7 : 1.6;
     this.clutchPedal += clamp(target - this.clutchPedal, -cr * dt, cr * dt);
+  }
+
+  // いまの速さで切れるタイヤの角度の上限
+  steerLimit(analog) {
+    const kmh = Math.abs(this.speed) * 3.6;
+    return SPEC.maxSteer / (1 + kmh / (analog ? 24 : 13));
   }
 
   // AT の変速の決まり(速度 km/h と、アクセルの踏み具合)
@@ -304,7 +316,7 @@ export class Car {
     let compF = [0, 0], compR = [0, 0];
     for (const w of this.wheels) {
       const attach = this.toWorld(v3(w.x, SPEC.attachY, w.z));
-      const g = groundAt(attach.x, attach.z);
+      const g = this.gAt(attach.x, attach.z);
       const upY = Math.max(0.2, up.y);
       // 真下ではなく車の下向きに伸ばしたときの、地面までの長さ
       let dist = (attach.y - g.h) / upY;
@@ -343,7 +355,7 @@ export class Car {
       const vc = add(this.vel, cross(this.angVel, r));
       const vLong = dot(vc, wf), vLat = dot(vc, ws);
       // 路面
-      const surf = surfaceAt(contact.x, contact.z, g);
+      const surf = this.sAt(contact.x, contact.z, g);
       w.surface = surf.type; w.depth = surf.depth;
       let mu = surf.grip;
       if (g.nr && g.nr.tunnel) mu = 1.0;           // トンネルの中は乾いている
@@ -400,8 +412,9 @@ export class Car {
     for (const [cmp, k, ia, ib] of [[compF, SPEC.arbF, 0, 1], [compR, SPEC.arbR, 2, 3]]) {
       const d = (cmp[0] - cmp[1]) * k;
       const a = this.wheels[ia], b = this.wheels[ib];
-      if (a.contact) applyAt(mul(up, -d), this.toWorld(v3(a.x, 0, a.z)));
-      if (b.contact) applyAt(mul(up, d), this.toWorld(v3(b.x, 0, b.z)));
+      // 沈んでいる側を持ち上げ、伸びている側を押し下げる
+      if (a.contact) applyAt(mul(up, d), this.toWorld(v3(a.x, 0, a.z)));
+      if (b.contact) applyAt(mul(up, -d), this.toWorld(v3(b.x, 0, b.z)));
     }
     // 空気の抵抗
     const sp = len(this.vel);
@@ -415,7 +428,7 @@ export class Car {
     for (const x of [-0.8, 0.8]) for (const y of [-0.28, 0.75]) for (const z of [-2.0, 2.0]) hull.push(v3(x, y, z));
     for (const p of hull) {
       const wp = this.toWorld(p);
-      const gh = groundAt(wp.x, wp.z).h;
+      const gh = this.gAt(wp.x, wp.z).h;
       const pen = gh - wp.y;
       if (pen > 0) {
         const r = sub(wp, this.pos);
@@ -473,7 +486,7 @@ export class Car {
 
   groundNormal(x, z, h0) {
     const e = 0.5;
-    const hx = groundAt(x + e, z).h, hz = groundAt(x, z + e).h;
+    const hx = this.gAt(x + e, z).h, hz = this.gAt(x, z + e).h;
     if (Math.abs(hx - h0) > 1.5 || Math.abs(hz - h0) > 1.5) return v3(0, 1, 0);
     return norm(v3(-(hx - h0) / e, 1, -(hz - h0) / e));
   }
