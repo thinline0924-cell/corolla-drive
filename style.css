@@ -126,3 +126,13 @@ input[type=range] { width: 100%; accent-color: var(--sodium); }
 }
 
 @media (pointer: coarse) { .menu button .k { display: none; } }
+
+/* 起動できなかったとき */
+.error-box { width: min(560px, 88vw); }
+.err-title { font-size: 22px; font-weight: 700; margin: 10px 0 14px; letter-spacing: 0.06em; }
+.error-box p { font-size: 15px; line-height: 1.8; margin: 0 0 10px; }
+.error-box .fix { color: var(--ink-dim); font-size: 14px; }
+.error-box .detail { margin: 16px 0; padding: 12px 14px; border-left: 3px solid var(--sodium); background: rgba(233, 229, 219, 0.05);
+  font-size: 12px; line-height: 1.7; color: var(--ink-dim); user-select: text; -webkit-user-select: text; word-break: break-all; }
+.error-box button { border: 1px solid var(--line); padding: 9px 18px; font-size: 14px; }
+.error-box button:hover { border-color: var(--ink-dim); }

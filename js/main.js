@@ -19,20 +19,38 @@ const loadBar = (p, text) => { $('#load-bar').style.width = (p * 100) + '%'; if 
 
 // ------------------------------------------------------------ 起動
 let W, C, scenery, carMod, cockpitMod, render, rainMod, skyMod, autop, T;
+let step = '';
+// このブラウザで 3D 表示(WebGL2)が使えるか
+function webglSupport() {
+  try {
+    const c = document.createElement('canvas');
+    if (c.getContext('webgl2')) return 2;
+    if (c.getContext('webgl') || c.getContext('experimental-webgl')) return 1;
+  } catch (e) { /* 使えない */ }
+  return 0;
+}
 async function boot() {
+  step = '3D表示の確認';
+  const gl = webglSupport();
+  if (gl < 2) throw Object.assign(new Error(gl === 1 ? 'WebGL2 not available (WebGL1 only)' : 'WebGL not available'), { kind: 'webgl', gl });
+  step = '山のデータ';
   loadBar(0.05, '山を作っています');
   await wait();
   W = await import('./world.js');
   loadBar(0.4, '景色を並べています');
   await wait();
+  step = 'プログラムの読み込み';
   [scenery, carMod, cockpitMod, render, rainMod, skyMod, autop, C, T] = await Promise.all([
     import('./scenery.js'), import('./carmodel.js'), import('./cockpit.js'), import('./render.js'),
     import('./rain.js'), import('./sky.js'), import('./autopilot.js'), import('./car.js'), import('./textures.js'),
   ]);
+  step = '景色の組み立て';
   setup();
   loadBar(0.75, '車を用意しています');
   await wait();
+  step = '車のモデル';
   await setupCar();
+  step = 'タイトル画面';
   loadBar(1, '');
   await wait();
   $('#loading').classList.add('hidden');
@@ -343,8 +361,13 @@ function ending() {
 
 // ------------------------------------------------------------ 毎フレーム
 let last = performance.now();
+let frameFailed = false;
 function frame(now) {
   requestAnimationFrame(frame);
+  if (frameFailed) return;
+  try { frameBody(now); } catch (e) { frameFailed = true; showError(e, '動いている途中'); }
+}
+function frameBody(now) {
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
   if (!car) return;
@@ -695,7 +718,34 @@ let fpsAcc = 0, fpsN = 0;
 setInterval(() => { window.FPS = fpsN; fpsN = 0; }, 1000);
 requestAnimationFrame(function c() { fpsN++; requestAnimationFrame(c); });
 
-boot().then(devStart).catch(e => {
+// 起動できなかったときの説明(原因と、どうすれば直るか)
+function showError(e, where) {
   console.error(e);
-  $('#load-text').textContent = '読み込みに失敗しました。ページを再読み込みしてください(' + (e.message || e) + ')';
-});
+  const m = String((e && e.message) || e);
+  let reason, fix;
+  if (e && e.kind === 'webgl' || /WebGL|webgl|context/.test(m)) {
+    reason = e && e.gl === 1
+      ? 'このブラウザでは、新しい 3D 表示(WebGL2)が使えません。'
+      : 'このブラウザでは、3D 表示(WebGL)が使えません。';
+    fix = 'Chrome:設定 → システム →「グラフィック アクセラレーションが使用可能な場合は使用する」をオンにして、Chrome を再起動してください。'
+      + 'Safari(iPhone・Mac)は、OS を最新にしてください。ほかのブラウザ(Chrome / Edge / Safari の最新版)でも試せます。';
+  } else if (/fetch|Failed to fetch|import|404|NetworkError|load/i.test(m)) {
+    reason = 'ファイルを読みこめませんでした(通信が切れたか、公開の途中です)。';
+    fix = '少し待ってから、ページを再読み込みしてください。Render の公開(Deploy)が終わっているかも確かめてください。';
+  } else if (/memory|Array buffer|allocation/i.test(m)) {
+    reason = '端末のメモリが足りませんでした。';
+    fix = 'ほかのアプリやタブを閉じてから、もう一度開いてください。';
+  } else {
+    reason = 'プログラムの途中で問題が起きました。';
+    fix = 'ページを再読み込みしてください。直らないときは、下の「くわしい内容」を知らせてください。';
+  }
+  const ua = navigator.userAgent.replace(/\s+/g, ' ');
+  $('#loading').classList.remove('hidden');
+  $('#loading').innerHTML = `<div class="load-box error-box">
+    <div class="eyebrow">ERROR</div>
+    <div class="err-title">起動できませんでした</div>
+    <p>${reason}</p><p class="fix">${fix}</p>
+    <div class="detail">くわしい内容<br>段階:${where || step}<br>内容:${m.replace(/</g, '&lt;')}<br>ブラウザ:${ua}</div>
+    <button onclick="location.reload()">再読み込み</button></div>`;
+}
+boot().then(devStart).catch(e => showError(e));
